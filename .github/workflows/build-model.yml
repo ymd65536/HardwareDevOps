@@ -28,20 +28,22 @@ jobs:
             openscad \
             ca-certificates \
             curl \
+            flatpak \
             gnupg \
             libfuse2
 
-          # Ubuntu's default repository is too old for the CLI options used by this project.
-          # Use the official Prusa3D package source to ensure a supported 2.8+ CLI that recognizes
-          # --printer-profile / --print-profile / --material-profile.
-          curl -fsSL https://packagecloud.io/prusa3d/PrusaSlicer/gpgkey | \
-            sudo gpg --dearmor -o /usr/share/keyrings/prusa3d-prusaslicer.gpg
+          # The previous PackageCloud repository used by older instructions is no longer valid.
+          # Prusa3D's current official Linux distribution path is Flathub, which is the supported
+          # route for a modern 2.9.x CLI that exposes --printer-profile / --print-profile / --material-profile.
+          sudo flatpak remote-add --if-not-exists flathub https://flathub.org/repo/flathub.flatpakrepo
+          sudo flatpak install -y --noninteractive flathub com.prusa3d.PrusaSlicer
 
-          echo "deb [signed-by=/usr/share/keyrings/prusa3d-prusaslicer.gpg] https://packagecloud.io/prusa3d/PrusaSlicer/ubuntu/ $(. /etc/os-release; echo "$VERSION_CODENAME") main" | \
-            sudo tee /etc/apt/sources.list.d/prusa3d-prusaslicer.list
-
-          sudo apt-get update
-          sudo DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends prusa-slicer
+          sudo tee /usr/local/bin/prusa-slicer >/dev/null <<'EOF'
+          #!/usr/bin/env bash
+          set -euo pipefail
+          exec flatpak run --command=prusa-slicer com.prusa3d.PrusaSlicer "$@"
+          EOF
+          sudo chmod +x /usr/local/bin/prusa-slicer
 
           if openscad --version >/dev/null 2>&1; then
             openscad --version
@@ -54,6 +56,8 @@ jobs:
           else
             prusa-slicer --help 2>&1 | head -n 20
           fi
+
+          prusa-slicer --help 2>&1 | grep -E -- '--printer-profile|--print-profile|--material-profile'
 
       - name: Run canonical build pipeline
         shell: bash
