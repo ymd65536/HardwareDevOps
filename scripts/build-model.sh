@@ -44,7 +44,7 @@ openscad \
   -D mounting_hole_depth=${MOUNTING_HOLE_DEPTH} \
   -o artifacts/copilot-stand.stl src/copilot-stand.scad
 
-openscad \
+xvfb-run -a openscad \
   -D stand_width=${STAND_WIDTH} \
   -D stand_depth=${STAND_DEPTH} \
   -D stand_height=${STAND_HEIGHT} \
