@@ -35,16 +35,18 @@ jobs:
           # The previous PackageCloud repository used by older instructions is no longer valid.
           # Prusa3D's current official Linux distribution path is Flathub, which is the supported
           # route for a modern 2.9.x CLI that exposes --printer-profile / --print-profile / --material-profile.
-          sudo flatpak remote-add --if-not-exists flathub https://flathub.org/repo/flathub.flatpakrepo
-          sudo flatpak install -y --noninteractive flathub com.prusa3d.PrusaSlicer
+          # Install as the runner user so Flatpak writes to $HOME/.var/app/... instead of creating
+          # root-owned directories that later fail when the app tries to create its data/config tree.
+          flatpak --user remote-add --if-not-exists flathub https://flathub.org/repo/flathub.flatpakrepo
+          flatpak --user install -y --noninteractive flathub com.prusa3d.PrusaSlicer
 
-          sudo mkdir -p "$HOME/.var/app/com.prusa3d.PrusaSlicer/config/PrusaSlicer"
+          mkdir -p "$HOME/.var/app/com.prusa3d.PrusaSlicer/config/PrusaSlicer"
           mkdir -p "$HOME/.config/PrusaSlicer"
 
           sudo tee /usr/local/bin/prusa-slicer >/dev/null <<'EOF'
           #!/usr/bin/env bash
           set -euo pipefail
-          exec flatpak run --command=prusa-slicer com.prusa3d.PrusaSlicer "$@"
+          exec flatpak run --user --command=prusa-slicer com.prusa3d.PrusaSlicer "$@"
           EOF
           sudo chmod +x /usr/local/bin/prusa-slicer
 
