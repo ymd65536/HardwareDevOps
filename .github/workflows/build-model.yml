@@ -28,27 +28,18 @@ jobs:
             openscad \
             ca-certificates \
             curl \
-            flatpak \
             gnupg \
-            libfuse2
+            libfuse2 \
+            snapd
 
-          # The previous PackageCloud repository used by older instructions is no longer valid.
-          # Prusa3D's current official Linux distribution path is Flathub, which is the supported
-          # route for a modern 2.9.x CLI that exposes --printer-profile / --print-profile / --material-profile.
-          # Install as the runner user so Flatpak writes to $HOME/.var/app/... instead of creating
-          # root-owned directories that later fail when the app tries to create its data/config tree.
-          flatpak --user remote-add --if-not-exists flathub https://flathub.org/repo/flathub.flatpakrepo
-          flatpak --user install -y --noninteractive flathub com.prusa3d.PrusaSlicer
+          # Do not use the Flatpak path here. The build is intentionally repo-managed and must
+          # run against the repository-configured vendor profile without depending on user-specific
+          # config trees or GUI bootstrap state.
+          sudo systemctl enable --now snapd
+          sudo snap wait system seed.loaded
 
-          mkdir -p "$HOME/.var/app/com.prusa3d.PrusaSlicer/config/PrusaSlicer"
-
-          sudo tee /usr/local/bin/prusa-slicer >/dev/null <<'EOF'
-          #!/usr/bin/env bash
-          set -euo pipefail
-          mkdir -p "$HOME/.var/app/com.prusa3d.PrusaSlicer/config/PrusaSlicer"
-          exec flatpak run --user --command=prusa-slicer com.prusa3d.PrusaSlicer "$@"
-          EOF
-          sudo chmod +x /usr/local/bin/prusa-slicer
+          # Install the official Ubuntu Snap package so prusa-slicer is on PATH as a normal CLI.
+          sudo snap install prusa-slicer --classic
 
           if openscad --version >/dev/null 2>&1; then
             openscad --version
