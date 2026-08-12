@@ -8,7 +8,7 @@ on:
 
 jobs:
   build-model:
-    runs-on: macos-latest
+    runs-on: ubuntu-latest
 
     steps:
       - name: Check out repository
@@ -19,53 +19,35 @@ jobs:
         with:
           python-version: '3.11'
 
-      - name: Install OpenSCAD
+      - name: Install OpenSCAD and PrusaSlicer
+        shell: bash
         run: |
-          brew install openscad
+          set -euxo pipefail
+          sudo apt-get update
+          sudo DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
+            openscad \
+            ca-certificates \
+            curl \
+            libfuse2
 
-      - name: Install PrusaSlicer
-        run: |
-          set -e
-          brew install --cask prusaslicer
-          echo "$(dirname "$(command -v prusa-slicer)")" >> "$GITHUB_PATH"
+          # Prefer the Ubuntu package when available for reproducibility.
+          # This keeps the CI dependency path aligned with the standard Linux toolchain and avoids
+          # GUI assumptions while still using the real PrusaSlicer CLI.
+          if apt-cache show prusa-slicer >/dev/null 2>&1; then
+            sudo DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends prusa-slicer
+          else
+            echo "prusa-slicer package not available in the default Ubuntu repositories for this runner." >&2
+            exit 1
+          fi
 
-      - name: Validate design parameters
-        run: |
-          set -e
-          python3 scripts/validate-stand.py
+          openscad --version
+          prusa-slicer --version
 
-      - name: Create artifact directories
+      - name: Run canonical build pipeline
+        shell: bash
         run: |
-          mkdir -p artifacts reports
-
-      - name: Generate STL
-        run: |
-          set -e
-          openscad -o artifacts/copilot-stand.stl src/copilot-stand.scad
-
-      - name: Generate PNG preview
-        run: |
-          set -e
-          openscad -o artifacts/copilot-stand.png --imgsize=1600,1200 src/copilot-stand.scad
-
-      - name: Slice STL with PrusaSlicer
-        run: |
-          set -e
-          PRUSA_SLICER_BIN="$(command -v prusa-slicer)"
-          "$PRUSA_SLICER_BIN" \
-            --ignore-nonexistent-config \
-            --load profiles/vendor/HardwareDevOps.ini \
-            --output artifacts/copilot-stand.gcode \
-            --export-gcode \
-            --printer-profile "Home FDM" \
-            --print-profile "0.20mm Standard @Home FDM" \
-            --material-profile "Generic PLA @Home FDM" \
-            artifacts/copilot-stand.stl
-
-      - name: Generate manufacturing report
-        run: |
-          set -e
-          python3 scripts/generate-manufacturing-report.py --input artifacts/copilot-stand.gcode --output reports/copilot-stand-report.json
+          set -euxo pipefail
+          bash scripts/build-model.sh
 
       - name: Upload generated artifacts
         if: always()

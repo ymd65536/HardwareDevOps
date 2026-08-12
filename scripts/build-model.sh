@@ -4,6 +4,33 @@ set -euo pipefail
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$ROOT_DIR"
 
+resolve_tool() {
+  local tool_name="$1"
+  local macos_path="$2"
+
+  if command -v "$tool_name" >/dev/null 2>&1; then
+    command -v "$tool_name"
+    return 0
+  fi
+
+  # macOS: keep the app-bundle fallback only for local developer environments.
+  # Linux CI should install the tool through the package manager and place it in PATH.
+  if [[ "$(uname -s)" == "Darwin" ]] && [[ -n "$macos_path" ]] && [[ -x "$macos_path" ]]; then
+    printf '%s\n' "$macos_path"
+    return 0
+  fi
+
+  return 1
+}
+
+validate_required_profile() {
+  local profile_path="$ROOT_DIR/profiles/vendor/HardwareDevOps.ini"
+  if [[ ! -f "$profile_path" ]]; then
+    echo "Required repository-managed PrusaSlicer profile not found: $profile_path" >&2
+    exit 1
+  fi
+}
+
 STAND_WIDTH="${STAND_WIDTH:-90}"
 STAND_DEPTH="${STAND_DEPTH:-70}"
 STAND_HEIGHT="${STAND_HEIGHT:-46}"
@@ -22,10 +49,30 @@ MOUNTING_HOLE_MARGIN="${MOUNTING_HOLE_MARGIN:-8}"
 MOUNTING_HOLE_DEPTH="${MOUNTING_HOLE_DEPTH:-12}"
 
 mkdir -p artifacts reports
+validate_required_profile
+
+OPENSCAD_BIN="$(resolve_tool openscad "/Applications/OpenSCAD.app/Contents/MacOS/OpenSCAD" || true)"
+PRUSA_SLICER_BIN="$(resolve_tool prusa-slicer "/Applications/PrusaSlicer.app/Contents/MacOS/PrusaSlicer" || true)"
+
+if [[ -z "$OPENSCAD_BIN" ]]; then
+  echo "OpenSCAD CLI not found in PATH. Install OpenSCAD before running this build." >&2
+  exit 1
+fi
+
+if [[ -z "$PRUSA_SLICER_BIN" ]]; then
+  echo "PrusaSlicer CLI not found in PATH. Install PrusaSlicer before running this build." >&2
+  exit 1
+fi
+
+printf 'OpenSCAD: %s\n' "$OPENSCAD_BIN"
+printf 'PrusaSlicer: %s\n' "$PRUSA_SLICER_BIN"
+printf '\n== Version check ==\n'
+"$OPENSCAD_BIN" --version
+"$PRUSA_SLICER_BIN" --version
 
 python3 scripts/validate-stand.py
 
-openscad \
+"$OPENSCAD_BIN" \
   -D stand_width=${STAND_WIDTH} \
   -D stand_depth=${STAND_DEPTH} \
   -D stand_height=${STAND_HEIGHT} \
@@ -45,7 +92,7 @@ openscad \
   -o artifacts/copilot-stand.stl src/copilot-stand.scad
 
 if command -v xvfb-run >/dev/null 2>&1; then
-  xvfb-run -a openscad \
+  xvfb-run -a "$OPENSCAD_BIN" \
     -D stand_width=${STAND_WIDTH} \
     -D stand_depth=${STAND_DEPTH} \
     -D stand_height=${STAND_HEIGHT} \
@@ -64,7 +111,7 @@ if command -v xvfb-run >/dev/null 2>&1; then
     -D mounting_hole_depth=${MOUNTING_HOLE_DEPTH} \
     -o artifacts/copilot-stand.png --imgsize=1600,1200 src/copilot-stand.scad
 else
-  openscad \
+  "$OPENSCAD_BIN" \
     -D stand_width=${STAND_WIDTH} \
     -D stand_depth=${STAND_DEPTH} \
     -D stand_height=${STAND_HEIGHT} \
@@ -84,26 +131,19 @@ else
     -o artifacts/copilot-stand.png --imgsize=1600,1200 src/copilot-stand.scad
 fi
 
-PRUSA_SLICER_BIN="${PRUSA_SLICER_BIN:-$(command -v prusa-slicer || command -v prusa-slicer-console || true)}"
-if [ -z "$PRUSA_SLICER_BIN" ] && [ -x "/Applications/PrusaSlicer.app/Contents/MacOS/PrusaSlicer" ]; then
-  PRUSA_SLICER_BIN="/Applications/PrusaSlicer.app/Contents/MacOS/PrusaSlicer"
-fi
+"$PRUSA_SLICER_BIN" \
+  --ignore-nonexistent-config \
+  --load "$ROOT_DIR/profiles/vendor/HardwareDevOps.ini" \
+  --output "$ROOT_DIR/artifacts/copilot-stand.gcode" \
+  --export-gcode \
+  --printer-profile "Home FDM (0.4 mm nozzle)" \
+  --print-profile "0.20mm Standard @Home FDM (0.4 mm nozzle)" \
+  --material-profile "Generic PLA @Home FDM (0.4 mm nozzle)" \
+  "$ROOT_DIR/artifacts/copilot-stand.stl"
 
-if [ -n "$PRUSA_SLICER_BIN" ]; then
-  "$PRUSA_SLICER_BIN" \
-    --ignore-nonexistent-config \
-    --load "$ROOT_DIR/profiles/vendor/HardwareDevOps.ini" \
-    --output "$ROOT_DIR/artifacts/copilot-stand.gcode" \
-    --export-gcode \
-    --printer-profile "Home FDM (0.4 mm nozzle)" \
-    --print-profile "0.20mm Standard @Home FDM (0.4 mm nozzle)" \
-    --material-profile "Generic PLA @Home FDM (0.4 mm nozzle)" \
-    "$ROOT_DIR/artifacts/copilot-stand.stl"
-
-  python3 scripts/generate-manufacturing-report.py \
-    --input "$ROOT_DIR/artifacts/copilot-stand.gcode" \
-    --output "$ROOT_DIR/reports/copilot-stand-report.json"
-fi
+python3 scripts/generate-manufacturing-report.py \
+  --input "$ROOT_DIR/artifacts/copilot-stand.gcode" \
+  --output "$ROOT_DIR/reports/copilot-stand-report.json"
 
 printf '\nBuild completed successfully.\n'
-ls -lh artifacts/copilot-stand.stl artifacts/copilot-stand.png artifacts/copilot-stand.gcode reports/copilot-stand-report.json 2>/dev/null || ls -lh artifacts/copilot-stand.stl artifacts/copilot-stand.png
+ls -lh artifacts/copilot-stand.stl artifacts/copilot-stand.png artifacts/copilot-stand.gcode reports/copilot-stand-report.json
