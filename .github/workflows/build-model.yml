@@ -41,15 +41,12 @@ jobs:
           flatpak --user install -y --noninteractive flathub com.prusa3d.PrusaSlicer
 
           mkdir -p "$HOME/.var/app/com.prusa3d.PrusaSlicer/config/PrusaSlicer"
-          mkdir -p "$HOME/.var/app/com.prusa3d.PrusaSlicer/data"
-          mkdir -p "$HOME/.config/PrusaSlicer"
 
           sudo tee /usr/local/bin/prusa-slicer >/dev/null <<'EOF'
           #!/usr/bin/env bash
           set -euo pipefail
           mkdir -p "$HOME/.var/app/com.prusa3d.PrusaSlicer/config/PrusaSlicer"
-          mkdir -p "$HOME/.var/app/com.prusa3d.PrusaSlicer/data"
-          exec flatpak run --user --command=prusa-slicer com.prusa3d.PrusaSlicer --datadir "$HOME/.var/app/com.prusa3d.PrusaSlicer/config/PrusaSlicer" "$@"
+          exec flatpak run --user --command=prusa-slicer com.prusa3d.PrusaSlicer "$@"
           EOF
           sudo chmod +x /usr/local/bin/prusa-slicer
 
