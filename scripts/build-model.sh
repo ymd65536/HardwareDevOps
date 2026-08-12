@@ -91,6 +91,7 @@ fi
 
 if [ -n "$PRUSA_SLICER_BIN" ]; then
   "$PRUSA_SLICER_BIN" \
+    --datadir "$ROOT_DIR/.prusa-data" \
     --ignore-nonexistent-config \
     --load "$ROOT_DIR/profiles/vendor/HardwareDevOps.ini" \
     --output "$ROOT_DIR/artifacts/copilot-stand.gcode" \
