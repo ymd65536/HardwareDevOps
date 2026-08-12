@@ -67,8 +67,17 @@ fi
 printf 'OpenSCAD: %s\n' "$OPENSCAD_BIN"
 printf 'PrusaSlicer: %s\n' "$PRUSA_SLICER_BIN"
 printf '\n== Version check ==\n'
-"$OPENSCAD_BIN" --version
-"$PRUSA_SLICER_BIN" --version
+if "$OPENSCAD_BIN" --version >/dev/null 2>&1; then
+  "$OPENSCAD_BIN" --version
+else
+  "$OPENSCAD_BIN" -v
+fi
+
+if "$PRUSA_SLICER_BIN" --version >/dev/null 2>&1; then
+  "$PRUSA_SLICER_BIN" --version
+else
+  "$PRUSA_SLICER_BIN" --help 2>&1 | head -n 8
+fi
 
 python3 scripts/validate-stand.py
 
