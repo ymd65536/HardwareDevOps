@@ -1,0 +1,11 @@
+[
+  {
+    "name": "Hardware DevOps",
+    "description": "Hardware DevOps printer presets for CI-driven manufacturing validation",
+    "visibility": "",
+    "id": "hardware-devops-fff",
+    "url": "https://example.invalid/HardwareDevOps/",
+    "index_url": "https://example.invalid/HardwareDevOps/vendor_indices.zip",
+    "selected": 1
+  }
+]

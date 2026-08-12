@@ -54,7 +54,7 @@ jobs:
           PRUSA_SLICER_BIN="$(command -v prusa-slicer)"
           "$PRUSA_SLICER_BIN" \
             --ignore-nonexistent-config \
-            --load profiles/home-fdm.ini \
+            --load profiles/vendor/HardwareDevOps.ini \
             --output artifacts/copilot-stand.gcode \
             --export-gcode \
             --printer-profile "Home FDM" \

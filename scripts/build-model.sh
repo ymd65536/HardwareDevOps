@@ -92,7 +92,7 @@ fi
 if [ -n "$PRUSA_SLICER_BIN" ]; then
   "$PRUSA_SLICER_BIN" \
     --ignore-nonexistent-config \
-    --load "$ROOT_DIR/profiles/home-fdm.ini" \
+    --load "$ROOT_DIR/profiles/vendor/HardwareDevOps.ini" \
     --output "$ROOT_DIR/artifacts/copilot-stand.gcode" \
     --export-gcode \
     --printer-profile "Home FDM (0.4 mm nozzle)" \
