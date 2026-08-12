@@ -40,7 +40,7 @@ jobs:
       - name: Generate PNG preview
         run: |
           set -e
-          openscad -o artifacts/copilot-stand.png --imgsize=1600,1200 src/copilot-stand.scad
+          xvfb-run -a openscad -o artifacts/copilot-stand.png --imgsize=1600,1200 src/copilot-stand.scad
 
       - name: Upload generated artifacts
         if: always()
