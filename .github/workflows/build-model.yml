@@ -8,7 +8,7 @@ on:
 
 jobs:
   build-model:
-    runs-on: ubuntu-latest
+    runs-on: macos-latest
 
     steps:
       - name: Check out repository
@@ -21,16 +21,22 @@ jobs:
 
       - name: Install OpenSCAD
         run: |
-          sudo apt-get update
-          sudo apt-get install -y openscad
+          brew install openscad
+
+      - name: Install PrusaSlicer
+        run: |
+          set -e
+          brew install --cask prusaslicer
+          echo "$(dirname "$(command -v prusa-slicer)")" >> "$GITHUB_PATH"
 
       - name: Validate design parameters
         run: |
           set -e
           python3 scripts/validate-stand.py
 
-      - name: Create artifact directory
-        run: mkdir -p artifacts
+      - name: Create artifact directories
+        run: |
+          mkdir -p artifacts reports
 
       - name: Generate STL
         run: |
@@ -40,12 +46,33 @@ jobs:
       - name: Generate PNG preview
         run: |
           set -e
-          xvfb-run -a openscad -o artifacts/copilot-stand.png --imgsize=1600,1200 src/copilot-stand.scad
+          openscad -o artifacts/copilot-stand.png --imgsize=1600,1200 src/copilot-stand.scad
+
+      - name: Slice STL with PrusaSlicer
+        run: |
+          set -e
+          PRUSA_SLICER_BIN="$(command -v prusa-slicer)"
+          "$PRUSA_SLICER_BIN" \
+            --ignore-nonexistent-config \
+            --load profiles/home-fdm.ini \
+            --output artifacts/copilot-stand.gcode \
+            --export-gcode \
+            --printer-profile "Home FDM" \
+            --print-profile "0.20mm Standard @Home FDM" \
+            --material-profile "Generic PLA @Home FDM" \
+            artifacts/copilot-stand.stl
+
+      - name: Generate manufacturing report
+        run: |
+          set -e
+          python3 scripts/generate-manufacturing-report.py --input artifacts/copilot-stand.gcode --output reports/copilot-stand-report.json
 
       - name: Upload generated artifacts
         if: always()
         uses: actions/upload-artifact@v4
         with:
           name: github-copilot-display-stand-artifacts
-          path: artifacts/
+          path: |
+            artifacts/
+            reports/
           if-no-files-found: error
