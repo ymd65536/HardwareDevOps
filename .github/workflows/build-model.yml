@@ -28,17 +28,20 @@ jobs:
             openscad \
             ca-certificates \
             curl \
+            gnupg \
             libfuse2
 
-          # Prefer the Ubuntu package when available for reproducibility.
-          # This keeps the CI dependency path aligned with the standard Linux toolchain and avoids
-          # GUI assumptions while still using the real PrusaSlicer CLI.
-          if apt-cache show prusa-slicer >/dev/null 2>&1; then
-            sudo DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends prusa-slicer
-          else
-            echo "prusa-slicer package not available in the default Ubuntu repositories for this runner." >&2
-            exit 1
-          fi
+          # Ubuntu's default repository is too old for the CLI options used by this project.
+          # Use the official Prusa3D package source to ensure a supported 2.8+ CLI that recognizes
+          # --printer-profile / --print-profile / --material-profile.
+          curl -fsSL https://packagecloud.io/prusa3d/PrusaSlicer/gpgkey | \
+            sudo gpg --dearmor -o /usr/share/keyrings/prusa3d-prusaslicer.gpg
+
+          echo "deb [signed-by=/usr/share/keyrings/prusa3d-prusaslicer.gpg] https://packagecloud.io/prusa3d/PrusaSlicer/ubuntu/ $(. /etc/os-release; echo "$VERSION_CODENAME") main" | \
+            sudo tee /etc/apt/sources.list.d/prusa3d-prusaslicer.list
+
+          sudo apt-get update
+          sudo DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends prusa-slicer
 
           if openscad --version >/dev/null 2>&1; then
             openscad --version
@@ -49,7 +52,7 @@ jobs:
           if prusa-slicer --version >/dev/null 2>&1; then
             prusa-slicer --version
           else
-            prusa-slicer --help 2>&1 | head -n 8
+            prusa-slicer --help 2>&1 | head -n 20
           fi
 
       - name: Run canonical build pipeline

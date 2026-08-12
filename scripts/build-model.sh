@@ -64,6 +64,12 @@ if [[ -z "$PRUSA_SLICER_BIN" ]]; then
   exit 1
 fi
 
+if ! "$PRUSA_SLICER_BIN" --help 2>&1 | grep -q -- '--printer-profile'; then
+  echo "Unsupported PrusaSlicer CLI detected. This project requires a modern PrusaSlicer build with --printer-profile / --print-profile / --material-profile support." >&2
+  echo "Install the official Prusa3D package or a 2.8+ release bundle." >&2
+  exit 1
+fi
+
 printf 'OpenSCAD: %s\n' "$OPENSCAD_BIN"
 printf 'PrusaSlicer: %s\n' "$PRUSA_SLICER_BIN"
 printf '\n== Version check ==\n'
@@ -76,7 +82,7 @@ fi
 if "$PRUSA_SLICER_BIN" --version >/dev/null 2>&1; then
   "$PRUSA_SLICER_BIN" --version
 else
-  "$PRUSA_SLICER_BIN" --help 2>&1 | head -n 8
+  "$PRUSA_SLICER_BIN" --help 2>&1 | head -n 20
 fi
 
 python3 scripts/validate-stand.py
