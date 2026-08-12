@@ -29,6 +29,7 @@ jobs:
 
       - name: Build model and manufacturing artifacts
         run: |
+          set -e
           bash scripts/build-model.sh
 
       - name: Upload generated artifacts
