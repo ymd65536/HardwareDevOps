@@ -1,0 +1,51 @@
+name: Build OpenSCAD model
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  build-model:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install OpenSCAD
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y openscad
+
+      - name: Validate design parameters
+        run: |
+          set -e
+          python3 scripts/validate-stand.py
+
+      - name: Create artifact directory
+        run: mkdir -p artifacts
+
+      - name: Generate STL
+        run: |
+          set -e
+          openscad -o artifacts/copilot-stand.stl src/copilot-stand.scad
+
+      - name: Generate PNG preview
+        run: |
+          set -e
+          openscad -o artifacts/copilot-stand.png --imgsize=1600,1200 src/copilot-stand.scad
+
+      - name: Upload generated artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: github-copilot-display-stand-artifacts
+          path: artifacts/
+          if-no-files-found: error
