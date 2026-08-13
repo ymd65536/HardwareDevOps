@@ -42,8 +42,10 @@ jobs:
           echo "Pinned PrusaSlicer version: ${PRUSA_SLICER_VERSION}"
           echo "Archive URL: ${PRUSA_SLICER_DOWNLOAD_URL}"
 
-          # Use the official Prusa3D release asset for the exact pinned stable version to keep the
-          # manufacturing toolchain reproducible across re-runs of the same commit.
+          # PrusaSlicer 2.9.5 does not publish an official Linux x86_64 binary on the GitHub release
+          # asset list. The official Linux download route points at a Flatpak path, which is intentionally
+          # excluded here because this repository must remain deterministic and native to Ubuntu CI.
+          # This guard fails fast before a Windows or non-Linux binary can be executed.
           PRUSA_ARCHIVE="$(mktemp -u).zip"
           curl -fsSL -A "Mozilla/5.0" -o "$PRUSA_ARCHIVE" "$PRUSA_SLICER_DOWNLOAD_URL"
 
@@ -56,9 +58,24 @@ jobs:
           PRUSA_EXTRACT_DIR="$(mktemp -d)"
           unzip -q "$PRUSA_ARCHIVE" -d "$PRUSA_EXTRACT_DIR"
 
-          PRUSA_BINARY="$(find "$PRUSA_EXTRACT_DIR" -type f \( -name 'prusa-slicer' -o -name 'prusa-slicer*' \) 2>/dev/null | head -n 1 || true)"
+          PRUSA_BINARY="$(find "$PRUSA_EXTRACT_DIR" -type f \
+            \( -name 'prusa-slicer' -o -name 'PrusaSlicer*' -o -name 'prusa-slicer*' \) \
+            ! -name '*.exe' ! -name '*.dll' ! -name '*.pdb' 2>/dev/null | head -n 1 || true)"
+
           if [[ -z "$PRUSA_BINARY" ]]; then
-            echo "The downloaded PrusaSlicer archive did not expose a usable prusa-slicer binary." >&2
+            echo "The downloaded PrusaSlicer archive did not expose a usable native Linux binary." >&2
+            exit 1
+          fi
+
+          file "$PRUSA_BINARY"
+
+          if [[ "$PRUSA_BINARY" == *.exe ]]; then
+            echo "Windows PrusaSlicer binary was selected on a Linux runner." >&2
+            exit 1
+          fi
+
+          if ! file "$PRUSA_BINARY" | grep -qE 'ELF|AppImage'; then
+            echo "Resolved PrusaSlicer binary is not a Linux executable." >&2
             exit 1
           fi
 
