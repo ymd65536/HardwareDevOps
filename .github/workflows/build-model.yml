@@ -6,11 +6,6 @@ on:
   pull_request:
   workflow_dispatch:
 
-env:
-  PRUSA_SLICER_VERSION: "2.9.5"
-  PRUSA_SLICER_DOWNLOAD_URL: "https://github.com/prusa3d/PrusaSlicer/releases/download/version_2.9.5/PrusaSlicer-2.9.5.zip"
-  PRUSA_SLICER_SHA256: "6ead72ccb6798533ec3eddec3737a5a332fa3e9b8b1331f9df53ee1d939b5377"
-
 jobs:
   build-model:
     runs-on: ubuntu-latest
@@ -19,101 +14,37 @@ jobs:
       - name: Check out repository
         uses: actions/checkout@v4
 
-      - name: Set up Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: '3.11'
-
-      - name: Install OpenSCAD and PrusaSlicer
+      - name: Build manufacturing toolchain image
         shell: bash
         run: |
           set -euxo pipefail
-          sudo apt-get update
-          sudo DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
-            openscad \
-            ca-certificates \
-            curl \
-            unzip \
-            gnupg \
-            libfuse2 \
-            desktop-file-utils \
-            fuse3
+          docker build -t hardware-devops-toolchain:prusaslicer-2.9.5 toolchain/
 
-          echo "Pinned PrusaSlicer version: ${PRUSA_SLICER_VERSION}"
-          echo "Archive URL: ${PRUSA_SLICER_DOWNLOAD_URL}"
-
-          # PrusaSlicer 2.9.5 does not publish an official Linux x86_64 binary on the GitHub release
-          # asset list. The official Linux download route points at a Flatpak path, which is intentionally
-          # excluded here because this repository must remain deterministic and native to Ubuntu CI.
-          # This guard fails fast before a Windows or non-Linux binary can be executed.
-          PRUSA_ARCHIVE="$(mktemp -u).zip"
-          curl -fsSL -A "Mozilla/5.0" -o "$PRUSA_ARCHIVE" "$PRUSA_SLICER_DOWNLOAD_URL"
-
-          echo "Downloaded archive sha256: $(sha256sum "$PRUSA_ARCHIVE" | awk '{print $1}')"
-          if [[ "$(sha256sum "$PRUSA_ARCHIVE" | awk '{print $1}')" != "${PRUSA_SLICER_SHA256}" ]]; then
-            echo "PrusaSlicer checksum mismatch for pinned version ${PRUSA_SLICER_VERSION}." >&2
-            exit 1
-          fi
-
-          PRUSA_EXTRACT_DIR="$(mktemp -d)"
-          unzip -q "$PRUSA_ARCHIVE" -d "$PRUSA_EXTRACT_DIR"
-
-          PRUSA_BINARY="$(find "$PRUSA_EXTRACT_DIR" -type f \
-            \( -name 'prusa-slicer' -o -name 'PrusaSlicer*' -o -name 'prusa-slicer*' \) \
-            ! -name '*.exe' ! -name '*.dll' ! -name '*.pdb' 2>/dev/null | head -n 1 || true)"
-
-          if [[ -z "$PRUSA_BINARY" ]]; then
-            echo "The downloaded PrusaSlicer archive did not expose a usable native Linux binary." >&2
-            exit 1
-          fi
-
-          file "$PRUSA_BINARY"
-
-          if [[ "$PRUSA_BINARY" == *.exe ]]; then
-            echo "Windows PrusaSlicer binary was selected on a Linux runner." >&2
-            exit 1
-          fi
-
-          if ! file "$PRUSA_BINARY" | grep -qE 'ELF|AppImage'; then
-            echo "Resolved PrusaSlicer binary is not a Linux executable." >&2
-            exit 1
-          fi
-
-          echo "Resolved PrusaSlicer binary: $PRUSA_BINARY"
-          sudo install -m 0755 "$PRUSA_BINARY" /usr/local/bin/prusa-slicer
-
-          if openscad --version >/dev/null 2>&1; then
-            openscad --version
-          else
-            openscad -v
-          fi
-
-          EXPECTED_VERSION="${PRUSA_SLICER_VERSION}"
-          PRUSA_VERSION_FILE="$(mktemp)"
-          prusa-slicer --version >"$PRUSA_VERSION_FILE" 2>&1 || true
-          echo "Actual PrusaSlicer version output:"
-          cat "$PRUSA_VERSION_FILE"
-
-          if ! grep -Eq "${EXPECTED_VERSION}" "$PRUSA_VERSION_FILE"; then
-            echo "Installed PrusaSlicer version does not match the pinned version ${EXPECTED_VERSION}." >&2
-            exit 1
-          fi
-
-          PRUSA_HELP_FILE="$(mktemp)"
-          prusa-slicer --help >"$PRUSA_HELP_FILE" 2>&1 || true
-          sed -n '1,40p' "$PRUSA_HELP_FILE"
-
-          if ! grep -E -q -- '--printer-profile|--print-profile|--material-profile' "$PRUSA_HELP_FILE"; then
-            echo "Installed PrusaSlicer does not provide the required CLI contract for this repository." >&2
-            echo "This repository requires --printer-profile / --print-profile / --material-profile support from a modern PrusaSlicer 2.8+ build." >&2
-            exit 1
-          fi
-
-      - name: Run canonical build pipeline
+      - name: Validate toolchain contract
         shell: bash
         run: |
           set -euxo pipefail
-          bash scripts/build-model.sh
+          docker run --rm \
+            -v "$PWD:/workspace" \
+            -w /workspace \
+            hardware-devops-toolchain:prusaslicer-2.9.5 \
+            bash -lc '
+              set -euxo pipefail
+              prusa-slicer --version
+              openscad --version
+              prusa-slicer --help > /tmp/prusa-help.txt
+              grep -E -q -- "--printer-profile|--print-profile|--material-profile" /tmp/prusa-help.txt
+            '
+
+      - name: Run canonical build pipeline in toolchain container
+        shell: bash
+        run: |
+          set -euxo pipefail
+          docker run --rm \
+            -v "$PWD:/workspace" \
+            -w /workspace \
+            hardware-devops-toolchain:prusaslicer-2.9.5 \
+            bash scripts/build-model.sh
 
       - name: Upload generated artifacts
         if: always()
