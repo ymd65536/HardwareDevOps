@@ -4,19 +4,16 @@ set -euo pipefail
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$ROOT_DIR"
 
+if [[ "$(uname -s)" != "Linux" ]]; then
+  echo "This manufacturing pipeline is Linux-only. Use the pinned toolchain image from GHCR or run inside an Ubuntu-based runner/container." >&2
+  exit 1
+fi
+
 resolve_tool() {
   local tool_name="$1"
-  local macos_path="$2"
 
   if command -v "$tool_name" >/dev/null 2>&1; then
     command -v "$tool_name"
-    return 0
-  fi
-
-  # macOS: keep the app-bundle fallback only for local developer environments.
-  # Linux CI should install the tool through the package manager and place it in PATH.
-  if [[ "$(uname -s)" == "Darwin" ]] && [[ -n "$macos_path" ]] && [[ -x "$macos_path" ]]; then
-    printf '%s\n' "$macos_path"
     return 0
   fi
 

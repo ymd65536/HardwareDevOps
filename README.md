@@ -45,63 +45,50 @@ The stand is a compact base with:
 
 The main parametric inputs are defined in the OpenSCAD source and can be changed by adjusting variables such as stand width, depth, height, and plate thickness. The `mounting_feature()` module keeps the hardware extension isolated and easy to evolve without disturbing the main body geometry.
 
-## Local generation steps
+## Linux-only build pipeline
 
-Install OpenSCAD first if it is not already available.
+This repository intentionally uses a pinned Linux toolchain image instead of installing manufacturing tools directly on a developer machine or a generic GitHub runner.
 
-### Quick run from a fresh checkout
+### Canonical local execution
 
-```bash
-chmod +x scripts/build-model.sh
-./scripts/build-model.sh
-```
-
-### Manual steps
-
-Render STL:
+This repository targets `linux/amd64` explicitly. Apple Silicon Macs default to `arm64`, which can produce a mismatched Linux image for the PrusaSlicer toolchain. Use Docker Buildx and set the platform explicitly.
 
 ```bash
-openscad -o artifacts/copilot-stand.stl src/copilot-stand.scad
+docker buildx build --platform linux/amd64 --load -t hardware-devops-toolchain:2.9.5 toolchain/
+
+docker pull --platform linux/amd64 ghcr.io/ymd65536/hardware-devops-toolchain:2.9.5
+
+docker run --rm --platform linux/amd64 \
+  -v "$PWD:/workspace" \
+  -w /workspace \
+  ghcr.io/ymd65536/hardware-devops-toolchain:2.9.5 \
+  bash scripts/build-model.sh
 ```
 
-Render a PNG preview:
+The script is intentionally Linux-only. If it is run outside a Linux environment, it fails fast with a clear message instead of silently depending on host-specific app bundles.
 
-```bash
-openscad -o artifacts/copilot-stand.png --imgsize=1600,1200 src/copilot-stand.scad
-```
+### Repository-managed build contract
 
-Optional preview mode without writing a file:
+The repository build contract is executed inside the container and validates:
 
-```bash
-openscad src/copilot-stand.scad
-```
+- OpenSCAD CLI availability
+- PrusaSlicer CLI availability
+- required PrusaSlicer profile flags
+- parameter validation via `python3 scripts/validate-stand.py`
+- STL generation and PNG preview rendering
+- G-code export and manufacturing report generation
 
-Optional design sanity validation:
-
-```bash
-python3 scripts/validate-stand.py
-```
-
-Optional parameter override for a custom size profile:
-
-```bash
-STAND_WIDTH=100 STAND_DEPTH=80 STAND_HEIGHT=52 ./scripts/build-model.sh
-```
-
-This pattern makes the stand easier to reproduce for different display sizes without editing the SCAD source directly.
-
-## GitHub Actions role
+### What GitHub Actions does
 
 The workflow in `.github/workflows/build-model.yml` performs the following:
 
 1. checks out the repository
-2. sets up Python for lightweight design checks
-3. installs OpenSCAD on the runner
-4. validates the parameter set with `scripts/validate-stand.py`
-5. renders the STL from the SCAD source
-6. renders a PNG preview image
-7. uploads both artifacts to the GitHub Actions artifact store
-8. exits with a failure if any generation or validation step fails
+2. builds the pinned Ubuntu-based toolchain image
+3. logs in to GHCR and publishes the image to the registry
+4. validates the toolchain contract inside the image
+5. runs the canonical build script inside the container
+6. uploads generated artefacts to GitHub Actions
+7. exits with a failure if any generation or validation step fails
 
 This creates the core hardware DevOps loop:
 

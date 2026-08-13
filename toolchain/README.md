@@ -66,12 +66,18 @@ This gives the repository a stable manufacturing execution environment while pre
 scripts/build-model.sh
 ```
 
-## Future GHCR plan
+## GHCR registry usage
 
-This design is compatible with a future migration to a registry such as GHCR, for example:
+The repository publishes the pinned Linux toolchain image to GHCR so the canonical build path is reproducible and decoupled from host-specific system state.
 
 ```text
 ghcr.io/ymd65536/hardware-devops-toolchain:2.9.5
 ```
 
-The key requirement for that migration is to keep the container image versioned with the same toolchain and build inputs, so the manufacturing build remains reproducible across environments.
+This toolchain is intentionally built for `linux/amd64`. Apple Silicon macOS systems default to `arm64`, which can create a mismatched container image for the PrusaSlicer dependency set. The supported build path is therefore:
+
+```bash
+docker buildx build --platform linux/amd64 --load -t hardware-devops-toolchain:2.9.5 toolchain/
+```
+
+The container image is built in GitHub Actions and validated before the canonical model build runs inside the same Linux environment. This keeps the manufacturing pipeline deterministic and prevents host-native build drift.
