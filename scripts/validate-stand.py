@@ -77,6 +77,10 @@ def main() -> int:
     ensure(values["pedestal_width"] < values["stand_width"], "pedestal_width must be smaller than stand_width")
     ensure(values["pedestal_depth"] < values["stand_depth"], "pedestal_depth must be smaller than stand_depth")
     ensure(values["base_thickness"] < values["stand_height"], "base_thickness must be smaller than stand_height")
+    ensure(
+        abs((values["base_thickness"] + values["pedestal_height"] + values["top_plate_thickness"]) - values["stand_height"]) < 1e-6,
+        "base_thickness + pedestal_height + top_plate_thickness must equal stand_height",
+    )
     ensure(values["nameplate_width"] <= values["stand_width"], "nameplate_width must not exceed stand_width")
     ensure(values["nameplate_depth"] <= values["stand_depth"], "nameplate_depth must not exceed stand_depth")
     ensure(values["top_plate_thickness"] <= values["stand_height"], "top_plate_thickness must be usable within the stand height")
