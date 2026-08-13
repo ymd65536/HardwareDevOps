@@ -30,16 +30,38 @@ jobs:
             curl \
             gnupg \
             libfuse2 \
-            snapd
+            desktop-file-utils \
+            fuse3
 
           # Do not use the Flatpak path here. The build is intentionally repo-managed and must
           # run against the repository-configured vendor profile without depending on user-specific
           # config trees or GUI bootstrap state.
-          sudo systemctl enable --now snapd
-          sudo snap wait system seed.loaded
+          # Prefer the official Prusa3D Linux AppImage distribution for 2.8+ so the CLI exposes the
+          # required profile flags used by the canonical build pipeline.
+          PRUSA_DOWNLOAD_PAGE="$(mktemp)"
+          curl -fsSL -A "Mozilla/5.0" "https://files.prusa3d.com/?latest=slicer-stable&per_page=all&lng=en" -o "$PRUSA_DOWNLOAD_PAGE"
 
-          # Install the official Ubuntu Snap package so prusa-slicer is on PATH as a normal CLI.
-          sudo snap install prusa-slicer --classic
+          PRUSA_APPIMAGE_URL="$(grep -Eo 'https?://[^" <>]*AppImage[^" <>]*' "$PRUSA_DOWNLOAD_PAGE" | head -n 1 || true)"
+          if [[ -z "$PRUSA_APPIMAGE_URL" ]]; then
+            echo "Unable to locate the official PrusaSlicer Linux AppImage from the Prusa3D download page." >&2
+            exit 1
+          fi
+
+          PRUSA_APPIMAGE="$(mktemp -u).AppImage"
+          curl -fsSL -A "Mozilla/5.0" -o "$PRUSA_APPIMAGE" "$PRUSA_APPIMAGE_URL"
+          chmod +x "$PRUSA_APPIMAGE"
+
+          PRUSA_EXTRACT_DIR="$(mktemp -d)"
+          cd "$PRUSA_EXTRACT_DIR"
+          "$PRUSA_APPIMAGE" --appimage-extract >/dev/null 2>&1 || true
+
+          PRUSA_BINARY="$(find "$PRUSA_EXTRACT_DIR/squashfs-root" -type f -name prusa-slicer -o -name 'prusa-slicer*' 2>/dev/null | head -n 1 || true)"
+          if [[ -z "$PRUSA_BINARY" ]]; then
+            echo "The downloaded PrusaSlicer AppImage did not expose a usable prusa-slicer binary." >&2
+            exit 1
+          fi
+
+          sudo install -m 0755 "$PRUSA_BINARY" /usr/local/bin/prusa-slicer
 
           if openscad --version >/dev/null 2>&1; then
             openscad --version
@@ -50,10 +72,19 @@ jobs:
           if prusa-slicer --version >/dev/null 2>&1; then
             prusa-slicer --version
           else
-            prusa-slicer --help 2>&1 | head -n 20
+            echo "prusa-slicer version check failed after installation." >&2
+            exit 1
           fi
 
-          prusa-slicer --help 2>&1 | grep -E -- '--printer-profile|--print-profile|--material-profile'
+          PRUSA_HELP_FILE="$(mktemp)"
+          prusa-slicer --help >"$PRUSA_HELP_FILE" 2>&1 || true
+          sed -n '1,20p' "$PRUSA_HELP_FILE"
+
+          if ! grep -E -q -- '--printer-profile|--print-profile|--material-profile' "$PRUSA_HELP_FILE"; then
+            echo "Installed PrusaSlicer does not provide the required CLI contract for this repository." >&2
+            echo "This repository requires --printer-profile / --print-profile / --material-profile support from a modern PrusaSlicer 2.8+ build." >&2
+            exit 1
+          fi
 
       - name: Run canonical build pipeline
         shell: bash
