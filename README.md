@@ -51,17 +51,15 @@ This repository intentionally uses a pinned Linux toolchain image instead of ins
 
 ### Canonical local execution
 
-This repository targets `linux/amd64` explicitly. Apple Silicon Macs default to `arm64`, which can produce a mismatched Linux image for the PrusaSlicer toolchain. Use Docker Buildx and set the platform explicitly.
+This repository targets `linux/amd64` explicitly. Apple Silicon Macs default to `arm64`, which can produce a mismatched Linux image for the Bambu Studio toolchain. Use Docker Buildx and set the platform explicitly.
 
 ```bash
-docker buildx build --platform linux/amd64 --load -t hardware-devops-toolchain:2.9.5 toolchain/
-
-docker pull --platform linux/amd64 ghcr.io/ymd65536/hardware-devops-toolchain:2.9.5
+docker buildx build --platform linux/amd64 --load -t hardware-devops-toolchain:bambu-studio toolchain/
 
 docker run --rm --platform linux/amd64 \
   -v "$PWD:/workspace" \
   -w /workspace \
-  ghcr.io/ymd65536/hardware-devops-toolchain:2.9.5 \
+  hardware-devops-toolchain:bambu-studio \
   bash scripts/build-model.sh
 ```
 
@@ -72,11 +70,11 @@ The script is intentionally Linux-only. If it is run outside a Linux environment
 The repository build contract is executed inside the container and validates:
 
 - OpenSCAD CLI availability
-- PrusaSlicer CLI availability
-- required PrusaSlicer profile flags
+- Bambu Studio Linux AppImage availability
+- required repository-managed Bambu profile directories
 - parameter validation via `python3 scripts/validate-stand.py`
 - STL generation and PNG preview rendering
-- G-code export and manufacturing report generation
+- Bambu headless slicing/export and manufacturing report generation
 
 ### What GitHub Actions does
 

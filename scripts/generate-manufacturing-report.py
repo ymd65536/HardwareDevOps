@@ -6,7 +6,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 
-TIME_RE = re.compile(r"(?:(\d+)h)?\s*(?:(\d+)m)?\s*(?:(\d+)s)?")
+TIME_RE = re.compile(r"(?:(\d+)h)?\s*(?:(\d+)m|min)?\s*(?:(\d+)s)?")
 FLOAT_RE = re.compile(r"[-+]?\d*\.?\d+")
 
 
@@ -40,6 +40,13 @@ def parse_int(value: str):
     return int(match.group(0))
 
 
+def extract_value(text: str):
+    if "=" not in text:
+        return None
+    _, value = text.split("=", 1)
+    return value.strip()
+
+
 def parse_metadata(gcode_path: Path):
     metadata = {
         "source_file": str(gcode_path),
@@ -64,40 +71,77 @@ def parse_metadata(gcode_path: Path):
         text = line[1:].strip()
         lower_text = text.lower()
 
-        if "estimated printing time" in lower_text or "print time" in lower_text:
-            if "=" in text:
-                _, value = text.split("=", 1)
+        if "estimated printing time" in lower_text or "print time" in lower_text or "time_elapsed" in lower_text:
+            value = extract_value(text)
+            if value is not None:
                 metadata["print_time_minutes"] = parse_print_time(value)
-        elif "filament used [mm]" in lower_text:
-            _, value = text.split("=", 1)
-            metadata["filament_mm"] = parse_float(value)
-        elif "filament used [cm3]" in lower_text:
-            _, value = text.split("=", 1)
-            metadata["filament_cm3"] = parse_float(value)
-        elif "filament used [g]" in lower_text:
-            _, value = text.split("=", 1)
-            metadata["filament_g"] = parse_float(value)
-        elif "layer_count" in lower_text:
-            _, value = text.split("=", 1)
-            metadata["layer_count"] = parse_int(value)
-        elif "total layers" in lower_text:
-            _, value = text.split("=", 1)
-            metadata["layer_count"] = parse_int(value)
+        elif "filament used [mm]" in lower_text or "filament_used_mm" in lower_text:
+            value = extract_value(text)
+            if value is not None:
+                metadata["filament_mm"] = parse_float(value)
+        elif "filament used [cm3]" in lower_text or "filament_used_cm3" in lower_text:
+            value = extract_value(text)
+            if value is not None:
+                metadata["filament_cm3"] = parse_float(value)
+        elif "filament used [g]" in lower_text or "filament_used_g" in lower_text:
+            value = extract_value(text)
+            if value is not None:
+                metadata["filament_g"] = parse_float(value)
+        elif "layer_count" in lower_text or "total layers" in lower_text:
+            value = extract_value(text)
+            if value is not None:
+                metadata["layer_count"] = parse_int(value)
         elif "nozzle_diameter" in lower_text:
-            _, value = text.split("=", 1)
-            metadata["nozzle_diameter"] = parse_float(value)
+            value = extract_value(text)
+            if value is not None:
+                metadata["nozzle_diameter"] = parse_float(value)
         elif "printer_model" in lower_text:
-            _, value = text.split("=", 1)
-            metadata["printer_model"] = value.strip()
+            value = extract_value(text)
+            if value is not None:
+                metadata["printer_model"] = value.strip()
         elif "material" in lower_text:
-            _, value = text.split("=", 1)
-            metadata["material"] = value.strip()
+            value = extract_value(text)
+            if value is not None:
+                metadata["material"] = value.strip()
+
+    # Bambu Studio commonly emits uppercase keys but with the same semantics.
+    for label in ("PRINTER_MODEL", "MATERIAL", "NOZZLE_DIAMETER", "LAYER_COUNT", "FILAMENT_USED_MM", "FILAMENT_USED_CM3", "FILAMENT_USED_G", "TIME_ELAPSED"):
+        found = False
+        for raw_line in gcode_path.read_text(encoding="utf-8", errors="replace").splitlines():
+            line = raw_line.strip()
+            if not line.startswith(";"):
+                continue
+            text = line[1:].strip()
+            if text.upper().startswith(label + " ="):
+                value = extract_value(text)
+                if value is None:
+                    continue
+                if label == "PRINTER_MODEL":
+                    metadata["printer_model"] = value.strip()
+                elif label == "MATERIAL":
+                    metadata["material"] = value.strip()
+                elif label == "NOZZLE_DIAMETER":
+                    metadata["nozzle_diameter"] = parse_float(value)
+                elif label == "LAYER_COUNT":
+                    metadata["layer_count"] = parse_int(value)
+                elif label == "FILAMENT_USED_MM":
+                    metadata["filament_mm"] = parse_float(value)
+                elif label == "FILAMENT_USED_CM3":
+                    metadata["filament_cm3"] = parse_float(value)
+                elif label == "FILAMENT_USED_G":
+                    metadata["filament_g"] = parse_float(value)
+                elif label == "TIME_ELAPSED":
+                    metadata["print_time_minutes"] = parse_print_time(value)
+                found = True
+                break
+        if found:
+            break
 
     return metadata
 
 
 def main():
-    parser = argparse.ArgumentParser(description="Generate a JSON manufacturing report from a PrusaSlicer G-code export.")
+    parser = argparse.ArgumentParser(description="Generate a JSON manufacturing report from a slicer G-code export.")
     parser.add_argument("--input", type=Path, required=True, help="Path to the generated G-code file")
     parser.add_argument("--output", type=Path, required=True, help="Path to the JSON report output")
     args = parser.parse_args()

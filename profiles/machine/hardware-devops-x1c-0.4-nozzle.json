@@ -1,0 +1,19 @@
+{
+  "type": "machine",
+  "name": "Hardware DevOps X1C 0.4 nozzle",
+  "inherits": "fdm_machine_common",
+  "from": "system",
+  "setting_id": "HDPX1C000",
+  "instantiation": "true",
+  "description": "Local repository-managed Bambu machine profile for validation and benchmark printing.",
+  "machine_model": "X1C",
+  "machine_technology": "FDM",
+  "nozzle_diameter": ["0.4"],
+  "printer_technology": "FFF",
+  "bed_shape": ["0x0,250x0,250x250,0x250"],
+  "max_print_height": ["250"],
+  "z_hop": ["0.4"],
+  "compatible_printers": [
+    "Bambu Lab X1C 0.4 nozzle"
+  ]
+}

@@ -1,15 +1,15 @@
 {
-  "filament_cm3": 29.61,
-  "filament_g": 0.0,
-  "filament_mm": 12309.48,
-  "generated_at_utc": "2026-08-13T00:14:44.389719+00:00",
-  "layer_count": 2,
-  "material": "50%",
+  "filament_cm3": null,
+  "filament_g": null,
+  "filament_mm": null,
+  "generated_at_utc": "2026-08-13T06:12:47.831356+00:00",
+  "layer_count": null,
+  "material": null,
   "notes": [
     "This report captures slicer metadata only. It does not certify print safety or manufacturability."
   ],
-  "nozzle_diameter": 0.4,
-  "print_time_minutes": 116,
-  "printer_model": "",
-  "source_file": "/Users/ymd65536/Desktop/HardwareDevOps/artifacts/copilot-stand.gcode"
+  "nozzle_diameter": null,
+  "print_time_minutes": null,
+  "printer_model": null,
+  "source_file": "/workspace/artifacts/result.json"
 }

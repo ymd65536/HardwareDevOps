@@ -5,25 +5,38 @@ ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$ROOT_DIR"
 
 if [[ "$(uname -s)" != "Linux" ]]; then
-  echo "This manufacturing pipeline is Linux-only. Use the pinned toolchain image from GHCR or run inside an Ubuntu-based runner/container." >&2
+  echo "This manufacturing pipeline is Linux-only. Use the pinned Docker toolchain or run inside an Ubuntu-based container." >&2
   exit 1
 fi
 
 resolve_tool() {
   local tool_name="$1"
+  shift || true
+  local fallback="${1:-}"
 
   if command -v "$tool_name" >/dev/null 2>&1; then
     command -v "$tool_name"
     return 0
   fi
 
+  if [[ -n "$fallback" ]] && [[ -x "$fallback" ]]; then
+    printf '%s\n' "$fallback"
+    return 0
+  fi
+
   return 1
 }
 
-validate_required_profile() {
-  local profile_path="$ROOT_DIR/profiles/vendor/HardwareDevOps.ini"
-  if [[ ! -f "$profile_path" ]]; then
-    echo "Required repository-managed PrusaSlicer profile not found: $profile_path" >&2
+validate_required_profiles() {
+  local missing=0
+  for dir in "$ROOT_DIR/profiles/machine" "$ROOT_DIR/profiles/process" "$ROOT_DIR/profiles/filament"; do
+    if [[ ! -d "$dir" ]]; then
+      echo "Required repository-managed Bambu profile directory not found: $dir" >&2
+      missing=1
+    fi
+  done
+
+  if [[ "$missing" -ne 0 ]]; then
     exit 1
   fi
 }
@@ -46,30 +59,42 @@ MOUNTING_HOLE_MARGIN="${MOUNTING_HOLE_MARGIN:-8}"
 MOUNTING_HOLE_DEPTH="${MOUNTING_HOLE_DEPTH:-12}"
 
 mkdir -p artifacts reports
-validate_required_profile
+validate_required_profiles
 
-OPENSCAD_BIN="$(resolve_tool openscad "/Applications/OpenSCAD.app/Contents/MacOS/OpenSCAD" || true)"
-PRUSA_SLICER_BIN="$(resolve_tool prusa-slicer "/Applications/PrusaSlicer.app/Contents/MacOS/PrusaSlicer" || true)"
+OPENSCAD_BIN="$(resolve_tool openscad "" || true)"
+BAMBU_STUDIO_BIN="${BAMBU_STUDIO_BIN:-}"
+if [[ -z "$BAMBU_STUDIO_BIN" ]]; then
+  BAMBU_STUDIO_BIN="$(resolve_tool bambu-studio "" || true)"
+fi
+if [[ -z "$BAMBU_STUDIO_BIN" ]]; then
+  BAMBU_STUDIO_BIN="$(find "$ROOT_DIR" -type f \( -name 'bambu-studio' -o -name 'AppRun' -o -name '*.AppImage' \) -print -quit 2>/dev/null || true)"
+fi
+if [[ -z "$BAMBU_STUDIO_BIN" ]]; then
+  echo "Bambu Studio CLI not found in PATH or repo. Install the official Linux AppImage or set BAMBU_STUDIO_BIN to the executable." >&2
+  exit 1
+fi
+
+if [[ "$BAMBU_STUDIO_BIN" == *"/AppRun" || "$BAMBU_STUDIO_BIN" == *".AppImage" ]]; then
+  export LD_LIBRARY_PATH="/opt/bambu/squashfs-root/bin:/usr/lib/x86_64-linux-gnu:/lib/x86_64-linux-gnu${LD_LIBRARY_PATH:+:${LD_LIBRARY_PATH}}"
+fi
 
 if [[ -z "$OPENSCAD_BIN" ]]; then
   echo "OpenSCAD CLI not found in PATH. Install OpenSCAD before running this build." >&2
   exit 1
 fi
 
-if [[ -z "$PRUSA_SLICER_BIN" ]]; then
-  echo "PrusaSlicer CLI not found in PATH. Install PrusaSlicer before running this build." >&2
-  exit 1
+if command -v xvfb-run >/dev/null 2>&1; then
+  BAMBU_HELP_OUTPUT="$(xvfb-run -a env LD_LIBRARY_PATH="$LD_LIBRARY_PATH" "$BAMBU_STUDIO_BIN" --help 2>&1 || true)"
+else
+  BAMBU_HELP_OUTPUT="$(env LD_LIBRARY_PATH="$LD_LIBRARY_PATH" "$BAMBU_STUDIO_BIN" --help 2>&1 || true)"
 fi
-
-PRUSA_HELP_OUTPUT="$($PRUSA_SLICER_BIN --help 2>&1 || true)"
-if ! printf '%s\n' "$PRUSA_HELP_OUTPUT" | grep -q -- '--printer-profile'; then
-  echo "Unsupported PrusaSlicer CLI detected. This project requires a modern PrusaSlicer build with --printer-profile / --print-profile / --material-profile support." >&2
-  echo "Install the official Prusa3D package or a 2.8+ release bundle." >&2
+if ! printf '%s\n' "$BAMBU_HELP_OUTPUT" | grep -q -- '--slice' || ! printf '%s\n' "$BAMBU_HELP_OUTPUT" | grep -q -- '--outputdir'; then
+  echo "Unsupported Bambu Studio CLI detected. This project expects the Linux AppImage with --slice and --outputdir support." >&2
   exit 1
 fi
 
 printf 'OpenSCAD: %s\n' "$OPENSCAD_BIN"
-printf 'PrusaSlicer: %s\n' "$PRUSA_SLICER_BIN"
+printf 'Bambu Studio: %s\n' "$BAMBU_STUDIO_BIN"
 printf '\n== Version check ==\n'
 if "$OPENSCAD_BIN" --version >/dev/null 2>&1; then
   "$OPENSCAD_BIN" --version
@@ -77,10 +102,10 @@ else
   "$OPENSCAD_BIN" -v
 fi
 
-if "$PRUSA_SLICER_BIN" --version >/dev/null 2>&1; then
-  "$PRUSA_SLICER_BIN" --version
+if "$BAMBU_STUDIO_BIN" --version >/dev/null 2>&1; then
+  "$BAMBU_STUDIO_BIN" --version
 else
-  "$PRUSA_SLICER_BIN" --help 2>&1 | head -n 20
+  "$BAMBU_STUDIO_BIN" --help 2>&1 | head -n 20 || true
 fi
 
 python3 scripts/validate-stand.py
@@ -144,19 +169,32 @@ else
     -o artifacts/copilot-stand.png --imgsize=1600,1200 src/copilot-stand.scad
 fi
 
-"$PRUSA_SLICER_BIN" \
-  --ignore-nonexistent-config \
-  --load "$ROOT_DIR/profiles/vendor/HardwareDevOps.ini" \
-  --output "$ROOT_DIR/artifacts/copilot-stand.gcode" \
-  --export-gcode \
-  --printer-profile "Home FDM (0.4 mm nozzle)" \
-  --print-profile "0.20mm Standard @Home FDM (0.4 mm nozzle)" \
-  --material-profile "Generic PLA @Home FDM (0.4 mm nozzle)" \
-  "$ROOT_DIR/artifacts/copilot-stand.stl"
+# Bambu Studio CLI accepts headless slicing with the STL directly in the output folder.
+if command -v xvfb-run >/dev/null 2>&1; then
+  xvfb-run -a env XDG_RUNTIME_DIR="$XDG_RUNTIME_DIR" LD_LIBRARY_PATH="$LD_LIBRARY_PATH" "$BAMBU_STUDIO_BIN" \
+    --outputdir "$ROOT_DIR/artifacts" \
+    --slice 0 \
+    "$ROOT_DIR/artifacts/copilot-stand.stl"
+else
+  env XDG_RUNTIME_DIR="$XDG_RUNTIME_DIR" LD_LIBRARY_PATH="$LD_LIBRARY_PATH" "$BAMBU_STUDIO_BIN" \
+    --outputdir "$ROOT_DIR/artifacts" \
+    --slice 0 \
+    "$ROOT_DIR/artifacts/copilot-stand.stl"
+fi
 
-python3 scripts/generate-manufacturing-report.py \
-  --input "$ROOT_DIR/artifacts/copilot-stand.gcode" \
-  --output "$ROOT_DIR/reports/copilot-stand-report.json"
+if [[ -f "$ROOT_DIR/artifacts/result.json" ]]; then
+  python3 scripts/generate-manufacturing-report.py \
+    --input "$ROOT_DIR/artifacts/result.json" \
+    --output "$ROOT_DIR/reports/copilot-stand-report.json"
+elif [[ -f "$ROOT_DIR/artifacts/copilot-stand.gcode" ]]; then
+  python3 scripts/generate-manufacturing-report.py \
+    --input "$ROOT_DIR/artifacts/copilot-stand.gcode" \
+    --output "$ROOT_DIR/reports/copilot-stand-report.json"
+else
+  python3 scripts/generate-manufacturing-report.py \
+    --input "$ROOT_DIR/artifacts/copilot-stand.3mf" \
+    --output "$ROOT_DIR/reports/copilot-stand-report.json"
+fi
 
 printf '\nBuild completed successfully.\n'
-ls -lh artifacts/copilot-stand.stl artifacts/copilot-stand.png artifacts/copilot-stand.gcode reports/copilot-stand-report.json
+ls -lh artifacts/copilot-stand.stl artifacts/copilot-stand.png reports/copilot-stand-report.json 2>/dev/null || true

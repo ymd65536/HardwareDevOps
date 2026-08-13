@@ -1,4 +1,4 @@
-name: Build OpenSCAD model
+name: Manufacturing toolchain and model build
 
 on:
   push:
@@ -14,7 +14,8 @@ env:
   TOOLCHAIN_IMAGE: ghcr.io/${{ github.repository_owner }}/hardware-devops-toolchain:2.9.5
 
 jobs:
-  build-model:
+  toolchain-build:
+    name: Toolchain build
     runs-on: ubuntu-latest
 
     steps:
@@ -37,9 +38,9 @@ jobs:
         with:
           context: ./toolchain
           file: ./toolchain/Dockerfile
-          load: true
-          push: ${{ github.event_name != 'pull_request' }}
           platforms: linux/amd64
+          load: ${{ github.event_name == 'pull_request' }}
+          push: ${{ github.event_name != 'pull_request' }}
           tags: |
             ghcr.io/${{ github.repository_owner }}/hardware-devops-toolchain:2.9.5
             ghcr.io/${{ github.repository_owner }}/hardware-devops-toolchain:latest
@@ -54,13 +55,35 @@ jobs:
             "$TOOLCHAIN_IMAGE" \
             bash -lc '
               set -euxo pipefail
-              prusa-slicer --version
               openscad --version
-              prusa-slicer --help > /tmp/prusa-help.txt
-              grep -E -q -- "--printer-profile|--print-profile|--material-profile" /tmp/prusa-help.txt
+              bambu-studio --help > /tmp/bambu-help.txt 2>&1 || true
+              grep -E -q -- "--slice|--outputdir" /tmp/bambu-help.txt
             '
 
-      - name: Run canonical build pipeline in toolchain container
+  model-build:
+    name: Model build
+    needs: toolchain-build
+    if: ${{ github.event_name != 'pull_request' }}
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Log in to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Pull pinned Linux toolchain image
+        shell: bash
+        run: |
+          set -euxo pipefail
+          docker pull --platform linux/amd64 "$TOOLCHAIN_IMAGE"
+
+      - name: Run canonical model build in toolchain container
         shell: bash
         run: |
           set -euxo pipefail

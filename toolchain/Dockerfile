@@ -1,80 +1,62 @@
-FROM --platform=linux/amd64 ubuntu:24.04
+FROM ubuntu:24.04
 
 ARG DEBIAN_FRONTEND=noninteractive
-ARG MAKE_JOBS=1
 ENV DEBIAN_FRONTEND=${DEBIAN_FRONTEND} \
-    MAKE_JOBS=${MAKE_JOBS} \
     LANG=C.UTF-8 \
     LC_ALL=C.UTF-8 \
     PATH=/usr/local/bin:${PATH} \
-    PYTHONUNBUFFERED=1
+    PYTHONUNBUFFERED=1 \
+    LD_LIBRARY_PATH=/opt/bambu/squashfs-root/bin:/usr/lib/x86_64-linux-gnu:/lib/x86_64-linux-gnu \
+    XDG_RUNTIME_DIR=/tmp/xdg-runtime
 
 RUN set -eux; \
     apt-get update; \
-    apt-cache policy \
-      git \
-      build-essential \
-      autoconf \
-      cmake \
-      libglu1-mesa-dev \
-      libgtk-3-dev \
-      libdbus-1-dev \
-      libhidapi-dev \
-      libwebkit2gtk-4.1-dev \
-      texinfo \
-      openscad \
-      python3 \
-      python3-pip \
-      pkg-config \
-      ca-certificates \
-      | sed -n '1,220p'; \
     apt-get install -y --no-install-recommends \
-      git \
-      build-essential \
-      autoconf \
-      automake \
-      cmake \
-      libtool \
-      locales \
-      libglu1-mesa-dev \
-      libgtk-3-dev \
-      libdbus-1-dev \
-      libhidapi-dev \
-      libwebkit2gtk-4.1-dev \
-      texinfo \
-      openscad \
+      ca-certificates \
+      curl \
       python3 \
       python3-pip \
-      pkg-config \
-      ca-certificates; \
-    locale-gen C.UTF-8 || true; \
-    rm -rf /var/lib/apt/lists/*
+      openscad \
+      xvfb \
+      qemu-user-static \
+      libx11-6 \
+      libxext6 \
+      libxrender1 \
+      libxi6 \
+      libxfixes3 \
+      libxrandr2 \
+      libxkbcommon0 \
+      libxkbcommon-x11-0 \
+      libgtk-3-0t64 \
+      libnotify4 \
+      libnss3 \
+      libasound2t64 \
+      libglib2.0-0t64 \
+      libdbus-1-3 \
+      libfontconfig1 \
+      libfreetype6 \
+      libwebkit2gtk-4.1-0 \
+      libgstreamer1.0-0 \
+      libgstreamer-plugins-base1.0-0 \
+      libgl1 \
+      libglu1-mesa \
+      libfuse2 \
+      && rm -rf /var/lib/apt/lists/*
 
-WORKDIR /src
-RUN git clone --branch version_2.9.5 --depth 1 --recursive https://github.com/prusa3d/PrusaSlicer.git
-
-WORKDIR /src/PrusaSlicer
+WORKDIR /opt/bambu
 RUN set -eux; \
-    sed -i 's#https://www.mpfr.org/mpfr-4.2.1/mpfr-4.2.1.tar.bz2#https://ftp.gnu.org/gnu/mpfr/mpfr-4.2.1.tar.bz2#' deps/+MPFR/MPFR.cmake; \
-    sed -i 's#https://gmplib.org/download/gmp/gmp-6.2.1.tar.bz2#https://ftp.gnu.org/gnu/gmp/gmp-6.2.1.tar.bz2#' deps/+GMP/GMP.cmake; \
-    grep -nE 'mpfr-4.2.1|gmp-6.2.1' deps/+MPFR/MPFR.cmake deps/+GMP/GMP.cmake; \
-    cd deps; \
-    mkdir -p build; \
-    cd build; \
-    cmake .. -DDEP_WX_GTK3=ON; \
-    make -j"${MAKE_JOBS}"; \
-    cd /src/PrusaSlicer; \
-    mkdir -p build; \
-    cd build; \
-    cmake .. -DSLIC3R_STATIC=1 -DSLIC3R_GTK=3 -DSLIC3R_PCH=OFF -DCMAKE_PREFIX_PATH=/src/PrusaSlicer/deps/build/destdir/usr/local; \
-    make -j"${MAKE_JOBS}"; \
-    install -m 0755 src/prusa-slicer /usr/local/bin/prusa-slicer
+    curl -fsSL -o BambuStudio.AppImage https://github.com/bambulab/BambuStudio/releases/download/v02.08.01.55/BambuStudio_ubuntu24.04-v02.08.01.55-20260715113557.AppImage; \
+    chmod +x BambuStudio.AppImage; \
+    qemu-x86_64-static ./BambuStudio.AppImage --appimage-extract >/dev/null 2>&1 || true; \
+    ln -sf /opt/bambu/squashfs-root/AppRun /usr/local/bin/bambu-studio
 
 RUN set -eux; \
-    prusa-slicer --version; \
+    mkdir -p "$XDG_RUNTIME_DIR"; \
+    chmod 700 "$XDG_RUNTIME_DIR"; \
     openscad --version; \
-    prusa-slicer --help > /tmp/prusa-help.txt; \
-    grep -E -q -- '--printer-profile|--print-profile|--material-profile' /tmp/prusa-help.txt
+    export LD_LIBRARY_PATH="/opt/bambu/squashfs-root/bin:/usr/lib/x86_64-linux-gnu:/lib/x86_64-linux-gnu${LD_LIBRARY_PATH:+:${LD_LIBRARY_PATH}}"; \
+    xvfb-run -a /opt/bambu/squashfs-root/AppRun --help >/tmp/bambu-help.txt 2>&1 || true; \
+    grep -E -q -- '--slice|--outputdir' /tmp/bambu-help.txt
 
 WORKDIR /workspace
 CMD ["bash"]

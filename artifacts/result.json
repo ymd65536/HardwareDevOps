@@ -1,0 +1,64 @@
+{
+    "error_string": "Success.",
+    "export_time": 0,
+    "layer_height": 0.20000000298023224,
+    "plate_index": 0,
+    "prepare_time": 89,
+    "return_code": 0,
+    "sliced_plates": [
+        {
+            "feature_type_times": {
+                "Bottom surface": 621.3352661132813,
+                "Bridge": 1005.5620727539063,
+                "Custom": 6.021404266357422,
+                "Inner wall": 1239.9407958984375,
+                "Internal solid infill": 2680.312255859375,
+                "Outer wall": 1277.7962646484375,
+                "Overhang wall": 11.21720027923584,
+                "Skirt": 12.064469337463379,
+                "Sparse infill": 8910.0810546875,
+                "Top surface": 687.1015014648438,
+                "Travel": 374.201416015625,
+                "Undefined": 369.88616943359375
+            },
+            "filament_change_times": 0,
+            "filaments": [
+                {
+                    "filament_id": "unknown",
+                    "id": 1,
+                    "main_used_g": 0.0,
+                    "total_used_g": 0.0
+                }
+            ],
+            "generate_support_material_time": 38,
+            "id": 1,
+            "infill_time": 204,
+            "layer_filament_change": 0,
+            "main_predication": 16819.6328125,
+            "make_perimeters_time": 208,
+            "obj_cached_cnt": 0,
+            "objects": [
+                {
+                    "bbox": {
+                        "depth": 70.0,
+                        "height": 31.0,
+                        "width": 90.0,
+                        "x": 54.9999885559082,
+                        "y": 65.00000762939453,
+                        "z": 0.0
+                    },
+                    "id": 5,
+                    "name": "copilot-stand.stl",
+                    "triangle_count": 436
+                }
+            ],
+            "sliced_time": 832,
+            "sliced_time_with_cache": 325,
+            "total_predication": 16821.33984375,
+            "triangle_count": 436,
+            "warning_message": "It seems object copilot-stand.stl has floating cantilever. Please re-orient the object or enable support generation."
+        }
+    ],
+    "sparse_infill_density": 20.0,
+    "wall_loops": 2
+}

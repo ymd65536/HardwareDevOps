@@ -1,0 +1,17 @@
+{
+  "type": "filament",
+  "name": "Hardware DevOps PLA",
+  "inherits": "Generic PLA @base",
+  "from": "system",
+  "setting_id": "HDPPLA000",
+  "instantiation": "true",
+  "description": "Local repository-managed Bambu filament profile for validation prints.",
+  "filament_max_volumetric_speed": ["15"],
+  "filament_cost": ["0"],
+  "filament_density": ["1.24"],
+  "filament_diameter": ["1.75"],
+  "extrusion_multiplier": ["1.0"],
+  "compatible_printers": [
+    "Bambu Lab X1C 0.4 nozzle"
+  ]
+}
