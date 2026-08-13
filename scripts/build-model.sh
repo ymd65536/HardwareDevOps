@@ -182,18 +182,22 @@ else
     "$ROOT_DIR/artifacts/copilot-stand.stl"
 fi
 
-if [[ -f "$ROOT_DIR/artifacts/result.json" ]]; then
+REPORT_INPUT=""
+if find "$ROOT_DIR/artifacts" -maxdepth 1 -type f \( -name '*.gcode' -o -name '*.GCODE' \) 2>/dev/null | grep -q .; then
+  REPORT_INPUT="$(find "$ROOT_DIR/artifacts" -maxdepth 1 -type f \( -name '*.gcode' -o -name '*.GCODE' \) | sort | head -n 1)"
+elif find "$ROOT_DIR/artifacts" -maxdepth 1 -type f \( -name '*.3mf' -o -name '*.3MF' \) 2>/dev/null | grep -q .; then
+  REPORT_INPUT="$(find "$ROOT_DIR/artifacts" -maxdepth 1 -type f \( -name '*.3mf' -o -name '*.3MF' \) | sort | head -n 1)"
+elif [[ -f "$ROOT_DIR/artifacts/result.json" ]]; then
+  REPORT_INPUT="$ROOT_DIR/artifacts/result.json"
+fi
+
+if [[ -n "$REPORT_INPUT" ]]; then
   python3 scripts/generate-manufacturing-report.py \
-    --input "$ROOT_DIR/artifacts/result.json" \
-    --output "$ROOT_DIR/reports/copilot-stand-report.json"
-elif [[ -f "$ROOT_DIR/artifacts/copilot-stand.gcode" ]]; then
-  python3 scripts/generate-manufacturing-report.py \
-    --input "$ROOT_DIR/artifacts/copilot-stand.gcode" \
+    --input "$REPORT_INPUT" \
     --output "$ROOT_DIR/reports/copilot-stand-report.json"
 else
-  python3 scripts/generate-manufacturing-report.py \
-    --input "$ROOT_DIR/artifacts/copilot-stand.3mf" \
-    --output "$ROOT_DIR/reports/copilot-stand-report.json"
+  echo "No slicer output artifact was found under artifacts/; report generation skipped." >&2
+  exit 1
 fi
 
 printf '\nBuild completed successfully.\n'

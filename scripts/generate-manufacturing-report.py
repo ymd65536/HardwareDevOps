@@ -2,6 +2,7 @@
 import argparse
 import json
 import re
+import zipfile
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -47,6 +48,63 @@ def extract_value(text: str):
     return value.strip()
 
 
+def extract_value_from_text(text: str):
+    if "=" in text:
+        _, value = text.split("=", 1)
+        return value.strip()
+    if ":" in text:
+        _, value = text.split(":", 1)
+        return value.strip()
+    return text.strip()
+
+
+def parse_3mf_metadata(three_mf_path: Path):
+    metadata = {
+        "printer_model": None,
+        "material": None,
+        "print_time_minutes": None,
+        "filament_mm": None,
+        "filament_cm3": None,
+        "filament_g": None,
+        "layer_count": None,
+        "nozzle_diameter": None,
+    }
+
+    try:
+        with zipfile.ZipFile(three_mf_path, "r") as zf:
+            names = [name for name in zf.namelist() if name.lower().endswith(".model") or name.lower().endswith(".xml")]
+            if not names:
+                return metadata
+            xml_text = zf.read(names[0]).decode("utf-8", errors="replace")
+    except zipfile.BadZipFile:
+        return metadata
+
+    def read_metadata_field(name: str):
+        match = re.search(rf'<metadata[^>]*name=["\']{re.escape(name)}["\'][^>]*>(.*?)</metadata>', xml_text, flags=re.IGNORECASE | re.DOTALL)
+        if not match:
+            return None
+        return match.group(1).strip()
+
+    fields = {
+        "PrintTime": ("print_time_minutes", lambda v: parse_print_time(v)),
+        "FilamentLength": ("filament_mm", lambda v: parse_float(v)),
+        "FilamentVolume": ("filament_cm3", lambda v: parse_float(v)),
+        "FilamentWeight": ("filament_g", lambda v: parse_float(v)),
+        "LayerCount": ("layer_count", lambda v: parse_int(v)),
+        "NozzleDiameter": ("nozzle_diameter", lambda v: parse_float(v)),
+        "PrinterModel": ("printer_model", lambda v: v or None),
+        "Material": ("material", lambda v: v or None),
+    }
+
+    for field_name, (key, parser) in fields.items():
+        value = read_metadata_field(field_name)
+        if value is None:
+            continue
+        metadata[key] = parser(value)
+
+    return metadata
+
+
 def parse_metadata(gcode_path: Path):
     metadata = {
         "source_file": str(gcode_path),
@@ -64,50 +122,60 @@ def parse_metadata(gcode_path: Path):
         ],
     }
 
-    for raw_line in gcode_path.read_text(encoding="utf-8", errors="replace").splitlines():
+    if gcode_path.suffix.lower() == ".3mf":
+        metadata.update(parse_3mf_metadata(gcode_path))
+        return metadata
+
+    lines = gcode_path.read_text(encoding="utf-8", errors="replace").splitlines()
+
+    for raw_line in lines:
         line = raw_line.strip()
         if not line.startswith(";"):
             continue
         text = line[1:].strip()
         lower_text = text.lower()
 
-        if "estimated printing time" in lower_text or "print time" in lower_text or "time_elapsed" in lower_text:
-            value = extract_value(text)
-            if value is not None:
+        if "estimated printing time" in lower_text or "time_elapsed" in lower_text:
+            value = extract_value_from_text(text)
+            if value:
                 metadata["print_time_minutes"] = parse_print_time(value)
-        elif "filament used [mm]" in lower_text or "filament_used_mm" in lower_text:
-            value = extract_value(text)
-            if value is not None:
+        elif "total filament length" in lower_text or "filament used [mm]" in lower_text or "filament_used_mm" in lower_text:
+            value = extract_value_from_text(text)
+            if value:
                 metadata["filament_mm"] = parse_float(value)
-        elif "filament used [cm3]" in lower_text or "filament_used_cm3" in lower_text:
-            value = extract_value(text)
-            if value is not None:
+        elif "total filament volume" in lower_text or "filament used [cm3]" in lower_text or "filament_used_cm3" in lower_text:
+            value = extract_value_from_text(text)
+            if value:
                 metadata["filament_cm3"] = parse_float(value)
-        elif "filament used [g]" in lower_text or "filament_used_g" in lower_text:
-            value = extract_value(text)
-            if value is not None:
+        elif "total filament weight" in lower_text or "filament used [g]" in lower_text or "filament_used_g" in lower_text:
+            value = extract_value_from_text(text)
+            if value:
                 metadata["filament_g"] = parse_float(value)
-        elif "layer_count" in lower_text or "total layers" in lower_text:
-            value = extract_value(text)
-            if value is not None:
+        elif "interlocking_beam_layer_count" in lower_text:
+            continue
+        elif "total layer number" in lower_text or "total layers" in lower_text or "layer_count" in lower_text:
+            value = extract_value_from_text(text)
+            if value:
                 metadata["layer_count"] = parse_int(value)
         elif "nozzle_diameter" in lower_text:
-            value = extract_value(text)
-            if value is not None:
+            value = extract_value_from_text(text)
+            if value:
                 metadata["nozzle_diameter"] = parse_float(value)
         elif "printer_model" in lower_text:
-            value = extract_value(text)
+            value = extract_value_from_text(text)
             if value is not None:
-                metadata["printer_model"] = value.strip()
-        elif "material" in lower_text:
-            value = extract_value(text)
-            if value is not None:
-                metadata["material"] = value.strip()
+                normalized = value.strip()
+                if normalized:
+                    metadata["printer_model"] = normalized
+                elif metadata["printer_model"] is None:
+                    metadata["printer_model"] = None
+        elif "filament_type" in lower_text or ("material" in lower_text and not "filament" in lower_text):
+            value = extract_value_from_text(text)
+            if value:
+                metadata["material"] = value.strip() or None
 
-    # Bambu Studio commonly emits uppercase keys but with the same semantics.
     for label in ("PRINTER_MODEL", "MATERIAL", "NOZZLE_DIAMETER", "LAYER_COUNT", "FILAMENT_USED_MM", "FILAMENT_USED_CM3", "FILAMENT_USED_G", "TIME_ELAPSED"):
-        found = False
-        for raw_line in gcode_path.read_text(encoding="utf-8", errors="replace").splitlines():
+        for raw_line in lines:
             line = raw_line.strip()
             if not line.startswith(";"):
                 continue
@@ -117,9 +185,11 @@ def parse_metadata(gcode_path: Path):
                 if value is None:
                     continue
                 if label == "PRINTER_MODEL":
-                    metadata["printer_model"] = value.strip()
+                    normalized = value.strip()
+                    metadata["printer_model"] = normalized or None
                 elif label == "MATERIAL":
-                    metadata["material"] = value.strip()
+                    normalized = value.strip()
+                    metadata["material"] = normalized or None
                 elif label == "NOZZLE_DIAMETER":
                     metadata["nozzle_diameter"] = parse_float(value)
                 elif label == "LAYER_COUNT":
@@ -132,10 +202,7 @@ def parse_metadata(gcode_path: Path):
                     metadata["filament_g"] = parse_float(value)
                 elif label == "TIME_ELAPSED":
                     metadata["print_time_minutes"] = parse_print_time(value)
-                found = True
                 break
-        if found:
-            break
 
     return metadata
 

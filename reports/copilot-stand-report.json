@@ -1,15 +1,15 @@
 {
-  "filament_cm3": null,
-  "filament_g": null,
-  "filament_mm": null,
-  "generated_at_utc": "2026-08-13T06:12:47.831356+00:00",
-  "layer_count": null,
-  "material": null,
+  "filament_cm3": 32079.08,
+  "filament_g": 0.0,
+  "filament_mm": 13336.93,
+  "generated_at_utc": "2026-08-13T06:30:37.668374+00:00",
+  "layer_count": 155,
+  "material": "0",
   "notes": [
     "This report captures slicer metadata only. It does not certify print safety or manufacturability."
   ],
-  "nozzle_diameter": null,
-  "print_time_minutes": null,
+  "nozzle_diameter": 0.4,
+  "print_time_minutes": 280,
   "printer_model": null,
-  "source_file": "/workspace/artifacts/result.json"
+  "source_file": "artifacts/plate_1.gcode"
 }

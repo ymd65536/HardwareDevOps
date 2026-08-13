@@ -94,3 +94,97 @@ class ManufacturingReportTests(unittest.TestCase):
             self.assertEqual(payload["layer_count"], 123)
             self.assertEqual(payload["printer_model"], "X1C")
             self.assertEqual(payload["material"], "PLA Basic")
+
+    def test_generate_report_parses_real_bambu_gcode_header(self):
+        gcode_content = """; HEADER_BLOCK_START
+; BambuStudio 02.08.01.55
+; estimated printing time (normal mode) = 4h 40m 21s
+; total layer number: 155
+; interlocking_beam_layer_count = 2
+; total filament length [mm] : 13336.93
+; total filament volume [cm^3] : 32079.08
+; total filament weight [g] : 0.00
+; filament_diameter: 1.75
+; filament_type = PLA
+; nozzle_diameter = 0.4
+; printer_model =
+; filament: 1
+; HEADER_BLOCK_END
+"""
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            tmpdir_path = Path(tmpdir)
+            gcode_path = tmpdir_path / "real_bambu.gcode"
+            report_path = tmpdir_path / "real_bambu_report.json"
+            gcode_path.write_text(gcode_content, encoding="utf-8")
+
+            result = subprocess.run(
+                [
+                    sys.executable,
+                    str(SCRIPT),
+                    "--input",
+                    str(gcode_path),
+                    "--output",
+                    str(report_path),
+                ],
+                capture_output=True,
+                text=True,
+            )
+
+            self.assertEqual(result.returncode, 0, msg=result.stderr)
+            payload = json.loads(report_path.read_text(encoding="utf-8"))
+            self.assertEqual(payload["print_time_minutes"], 280)
+            self.assertAlmostEqual(payload["filament_mm"], 13336.93)
+            self.assertAlmostEqual(payload["filament_cm3"], 32079.08)
+            self.assertAlmostEqual(payload["filament_g"], 0.0)
+            self.assertEqual(payload["layer_count"], 155)
+            self.assertEqual(payload["material"], "PLA")
+            self.assertAlmostEqual(payload["nozzle_diameter"], 0.4)
+            self.assertIsNone(payload["printer_model"])
+
+    def test_generate_report_parses_bambu_3mf_metadata(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            tmpdir_path = Path(tmpdir)
+            three_mf_path = tmpdir_path / "sample.3mf"
+            report_path = tmpdir_path / "report_3mf.json"
+
+            model_xml = """<?xml version=\"1.0\" encoding=\"UTF-8\"?>
+<model unit=\"millimeter\" xml:lang=\"en-US\">
+  <metadata name=\"PrintTime\">4h 40m 21s</metadata>
+  <metadata name=\"LayerCount\">155</metadata>
+  <metadata name=\"NozzleDiameter\">0.4</metadata>
+  <metadata name=\"PrinterModel\">X1C</metadata>
+  <metadata name=\"Material\">PLA</metadata>
+  <metadata name=\"FilamentLength\">13336.93</metadata>
+  <metadata name=\"FilamentVolume\">32079.08</metadata>
+  <metadata name=\"FilamentWeight\">0.00</metadata>
+</model>
+"""
+
+            import zipfile
+            with zipfile.ZipFile(three_mf_path, "w", compression=zipfile.ZIP_DEFLATED) as zf:
+                zf.writestr("3D/3dmodel.model", model_xml)
+
+            result = subprocess.run(
+                [
+                    sys.executable,
+                    str(SCRIPT),
+                    "--input",
+                    str(three_mf_path),
+                    "--output",
+                    str(report_path),
+                ],
+                capture_output=True,
+                text=True,
+            )
+
+            self.assertEqual(result.returncode, 0, msg=result.stderr)
+            payload = json.loads(report_path.read_text(encoding="utf-8"))
+            self.assertEqual(payload["print_time_minutes"], 280)
+            self.assertAlmostEqual(payload["filament_mm"], 13336.93)
+            self.assertAlmostEqual(payload["filament_cm3"], 32079.08)
+            self.assertAlmostEqual(payload["filament_g"], 0.0)
+            self.assertEqual(payload["layer_count"], 155)
+            self.assertEqual(payload["material"], "PLA")
+            self.assertEqual(payload["printer_model"], "X1C")
+            self.assertAlmostEqual(payload["nozzle_diameter"], 0.4)
