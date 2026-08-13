@@ -44,6 +44,10 @@ jobs:
           tags: |
             ghcr.io/${{ github.repository_owner }}/hardware-devops-toolchain:2.9.5
             ghcr.io/${{ github.repository_owner }}/hardware-devops-toolchain:latest
+          cache-from: |
+            type=gha
+          cache-to: |
+            type=gha,mode=max
 
       - name: Validate toolchain contract
         shell: bash
